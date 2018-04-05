@@ -1,0 +1,38 @@
+version: '3.1'
+
+services:
+
+  wordpress:
+    image: wordpress
+    restart: always
+    depends_on:
+      - database
+    networks:
+      - web
+      - default
+    environment:
+      WORDPRESS_DB_PASSWORD: example
+    volumes:
+      - ./config/php.conf.uploads.ini:/usr/local/etc/php/conf.d/uploads.ini
+      - ./wp-app:/var/www/html # Full wordpress project
+    labels:
+      - "traefik.backend=wordpress-example"
+      - "traefik.docker.network=web"
+      - "traefik.frontend.rule=Host:example.dk,www.dellydot.dk"
+      - "traefik.enable=true"
+      - "traefik.port=80"
+
+  database:
+    image: mariadb
+    restart: always
+    networks:
+      - web
+      - default
+    environment:
+      MYSQL_ROOT_PASSWORD: example
+    volumes:
+      - ./wp-data:/docker-entrypoint-initdb.d
+
+networks:
+  web:
+    external: true
