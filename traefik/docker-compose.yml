@@ -1,20 +1,39 @@
-version: '3'
-
 services:
   reverse-proxy:
-    image: traefik #The official Traefik docker image
+    image: traefik:v3.4
     container_name: traefik
-    command: --api --docker #Enables the web UI and tells Træfik to listen to docker
+    restart: unless-stopped
+    command:
+      - --api.dashboard=true
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --providers.docker.network=web
+      - --entrypoints.web.address=:80
+      - --entrypoints.web.http.redirections.entrypoint.to=websecure
+      - --entrypoints.web.http.redirections.entrypoint.scheme=https
+      - --entrypoints.websecure.address=:443
+      - --certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL}
+      - --certificatesresolvers.letsencrypt.acme.storage=/data/acme.json
+      - --certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web
     networks:
       - web
     ports:
-      - "80:80"     #The HTTP port
-      - "443:443"   #The HTTPS port
-      - "8080:8080" #The Web UI (enabled by --api)
+      - "80:80"
+      - "443:443"
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock #So that Traefik can listen to the Docker events
-      - ./traefik.toml:/traefik.toml
-      - ./acme.json:/acme.json
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - acme-data:/data
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.dashboard.rule=Host(`${TRAEFIK_DASHBOARD_HOST}`) && (PathPrefix(`/api`) || PathPrefix(`/dashboard`))"
+      - "traefik.http.routers.dashboard.service=api@internal"
+      - "traefik.http.routers.dashboard.entrypoints=websecure"
+      - "traefik.http.routers.dashboard.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.dashboard.middlewares=dashboard-auth"
+      - "traefik.http.middlewares.dashboard-auth.basicauth.users=${TRAEFIK_DASHBOARD_AUTH}"
+
+volumes:
+  acme-data:
 
 networks:
   web:
