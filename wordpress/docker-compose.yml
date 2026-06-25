@@ -1,37 +1,47 @@
-version: '3.1'
-
 services:
-
   wordpress:
-    image: wordpress
-    restart: always
+    image: wordpress:6.8-php8.4-apache
+    restart: unless-stopped
     depends_on:
-      - database
+      database:
+        condition: service_healthy
     networks:
       - web
       - default
     environment:
-      WORDPRESS_DB_PASSWORD: example
+      WORDPRESS_DB_HOST: database
+      WORDPRESS_DB_USER: wordpress
+      WORDPRESS_DB_PASSWORD: ${WORDPRESS_DB_PASSWORD}
+      WORDPRESS_DB_NAME: wordpress
     volumes:
-      - ./config/php.conf.uploads.ini:/usr/local/etc/php/conf.d/uploads.ini
-      - ./wp-app:/var/www/html # Full wordpress project
+      - wp-content:/var/www/html/wp-content
     labels:
-      - "traefik.backend=wordpress-example"
-      - "traefik.docker.network=web"
-      - "traefik.frontend.rule=Host:example.dk,www.dellydot.dk"
       - "traefik.enable=true"
-      - "traefik.port=80"
+      - "traefik.http.routers.wordpress.rule=Host(`${WORDPRESS_HOST}`)"
+      - "traefik.http.routers.wordpress.entrypoints=websecure"
+      - "traefik.http.routers.wordpress.tls.certresolver=letsencrypt"
+      - "traefik.docker.network=web"
 
   database:
-    image: mariadb
-    restart: always
-    networks:
-      - web
-      - default
+    image: mariadb:11.8
+    restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: example
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD}
+      MARIADB_DATABASE: wordpress
+      MARIADB_USER: wordpress
+      MARIADB_PASSWORD: ${WORDPRESS_DB_PASSWORD}
     volumes:
-      - ./wp-data:/docker-entrypoint-initdb.d
+      - db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+volumes:
+  wp-content:
+  db-data:
 
 networks:
   web:

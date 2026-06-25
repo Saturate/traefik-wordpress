@@ -1,15 +1,61 @@
-# Traefik Wordpress
+# Traefik WordPress
 
-This is an example on how to use [Træfik](https://traefik.io/) with a wordpress site, or a node web app.
-This is with a Lets Encrypt setup, handled by Træfik.
+Example setup for running [Traefik](https://traefik.io/) v3 as a reverse proxy in front of WordPress, with automatic Let's Encrypt TLS certificates.
 
-I really need a nice name, but it's hard.
+## Prerequisites
+
+- Docker with the Compose plugin
+- A domain name pointing to your server
 
 ## Getting started
-First you need docker, and that's pretty much it. Then just follow these steps:
 
-1. `docker network create web` Creates the web-network that we will use across docker containers.
-2. `cd treafik` & `docker-compose up -d`, this starts the load balancer.
-4. `cd wordpress` & `docker-compose up -d`, this starts the wordpress website.
+1. Create the shared network:
 
-You can have all the sites you like, this should be no problem, just update the labels for docker.
+   ```bash
+   docker network create web
+   ```
+
+2. Configure and start Traefik:
+
+   ```bash
+   cd traefik
+   cp .env.example .env
+   # Edit .env with your email, dashboard hostname, and dashboard credentials
+   docker compose up -d
+   ```
+
+3. Configure and start WordPress:
+
+   ```bash
+   cd wordpress
+   cp .env.example .env
+   # Edit .env with your domain and database passwords
+   docker compose up -d
+   ```
+
+## www redirect
+
+The WordPress router only matches the exact `WORDPRESS_HOST` value. If you need `www.example.com` to redirect to `example.com`, add these labels to the WordPress service:
+
+```yaml
+- "traefik.http.routers.wordpress-www.rule=Host(`www.${WORDPRESS_HOST}`)"
+- "traefik.http.routers.wordpress-www.entrypoints=websecure"
+- "traefik.http.routers.wordpress-www.tls.certresolver=letsencrypt"
+- "traefik.http.routers.wordpress-www.middlewares=www-redirect"
+- "traefik.http.middlewares.www-redirect.redirectregex.regex=^https://www\\.(.*)"
+- "traefik.http.middlewares.www-redirect.redirectregex.replacement=https://$${1}"
+```
+
+## Adding more sites
+
+Add another service with `traefik.enable=true` labels and the `web` network. Traefik picks up new containers automatically. Each site needs its own router name and `Host()` rule.
+
+## Dashboard
+
+The Traefik dashboard is available at `https://<TRAEFIK_DASHBOARD_HOST>/dashboard/` (trailing slash required), protected by HTTP basic auth. Generate credentials with:
+
+```bash
+echo $(htpasswd -nB admin) | sed -e 's/\$/\$\$/g'
+```
+
+Paste the output into `TRAEFIK_DASHBOARD_AUTH` in `traefik/.env`.
